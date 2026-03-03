@@ -87,7 +87,10 @@ with st.sidebar:
                         // It will strictly reload the parent frame ONCE per expired timeframe.
                         if (sessionStorage.getItem('last_timer_reload') !== nextFetch.toString()) {{
                             sessionStorage.setItem('last_timer_reload', nextFetch.toString());
-                            setTimeout(function(){{ window.parent.location.reload(); }}, 4000);
+                            setTimeout(function() {{ 
+                                try {{ window.location.reload(); }} catch(e) {{}}
+                                try {{ window.parent.location.reload(); }} catch(e) {{}}
+                            }}, 5000);
                         }}
                     }} else {{
                         var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));

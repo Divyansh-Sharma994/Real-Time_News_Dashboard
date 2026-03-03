@@ -6,7 +6,8 @@ DB_NAME = "news_tracker.db"
 
 @contextmanager
 def get_db_connection():
-    conn = sqlite3.connect(DB_NAME)
+    # Critical for APScheduler + Streamlit Cloud
+    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
