@@ -58,11 +58,14 @@ with st.sidebar:
     if last_fetch_str:
         try:
             last_fetch_dt = datetime.datetime.fromisoformat(last_fetch_str)
+            # Convert to IST for UI
+            last_fetch_ist = last_fetch_dt + datetime.timedelta(hours=5, minutes=30)
             next_fetch_dt = last_fetch_dt + datetime.timedelta(minutes=5)
+            next_fetch_ist = next_fetch_dt + datetime.timedelta(hours=5, minutes=30)
             
-            # Text based times
-            st.write(f"**Last Check:** {last_fetch_dt.strftime('%H:%M:%S')}")
-            st.write(f"**Next Check:** {next_fetch_dt.strftime('%H:%M:%S')}")
+            # Text based times in IST
+            st.write(f"**Last Check:** {last_fetch_ist.strftime('%H:%M:%S')} (IST)")
+            st.write(f"**Next Check:** {next_fetch_ist.strftime('%H:%M:%S')} (IST)")
             
             # Classy JS Countdown Widget
             timer_html = f"""
@@ -120,7 +123,7 @@ with st.sidebar:
     if st.button("Fetch Now! (Manual Override)"):
         with st.spinner("Fetching latest news..."):
             new_arts = fetch_all_companies()
-            set_last_fetch_time(datetime.datetime.now().isoformat())
+            set_last_fetch_time(datetime.datetime.now(datetime.timezone.utc).isoformat())
             if new_arts:
                 send_notification(new_arts)
                 st.success(f"Found {len(new_arts)} new articles and sent notification.")
