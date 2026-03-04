@@ -206,10 +206,14 @@ else:
                     st.markdown(f"<span style='color: {sent_color}; font-weight: bold;'>{sentiment.upper()}</span>", unsafe_allow_html=True)
                 
                 with col_b:
-                    st.markdown(f"**Summary**")
-                    # Remove HTML tags from summary if any
-                    clean_summary = row.get('summary', 'No summary available.').replace('<b>', '').replace('</b>', '').replace('<br>', '\n')
-                    st.markdown(f"_{clean_summary}_")
+                    st.markdown(f"**Full Article Content**")
+                    # Clean up common RSS/HTML tags and display the long text
+                    clean_text = row.get('summary', 'No content available.').replace('<b>', '').replace('</b>', '').replace('<br>', '\n')
+                    # Use a text area or a scrollable container if the text is very long
+                    if len(clean_text) > 1000:
+                        st.text_area("Original Text", value=clean_text, height=300, disabled=True, label_visibility="collapsed")
+                    else:
+                        st.markdown(f"{clean_text}")
                 
                 with col_c:
                     st.markdown(f"**Details**")

@@ -5,6 +5,12 @@ from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 from database import get_all_companies, add_article, update_company_status, init_db
 from textblob import TextBlob
+from newspaper import Article
+import logging
+
+# Setup basic logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Adding +when:1d to filter it at Google's end, and strictly enforcing it in python.
 # Base URL for Global and India regions
@@ -44,9 +50,25 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
         published_at = getattr(entry, 'published', 'Unknown Date')
         source = getattr(entry, 'source', {}).get('title', 'Google News')
         summary = getattr(entry, 'summary', 'No summary available.')
+        full_content = "Could not fetch full article content."
         
-        # Simple Sentiment analysis using TextBlob
-        blob = TextBlob(f"{title} {summary}")
+        # Try to fetch full article content using Newspaper3k
+        if link:
+            try:
+                # Newspaper3k is great for extracting clean text from news URLs
+                article = Article(link)
+                article.download()
+                article.parse()
+                if article.text.strip():
+                    full_content = article.text
+                else:
+                    full_content = summary # Fallback to RSS summary if parsing fails
+            except Exception as e:
+                logger.error(f"Error fetching full content from {link}: {e}")
+                full_content = summary # Fallback
+        
+        # Simple Sentiment analysis using TextBlob (on full content if available)
+        blob = TextBlob(f"{title} {full_content[:1000]}") # Analyze first 1000 chars
         polarity = blob.sentiment.polarity
         
         if polarity > 0.05:
@@ -63,14 +85,14 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                 link=link,
                 published_at=published_at,
                 source=source,
-                summary=summary,
+                summary=full_content, # Now storing full content in summary column
                 sentiment=sentiment
             )
             if is_new:
                 return {
                     'title': title, 'link': link, 'published_at': published_at,
                     'source': source, 'company_name': company_name,
-                    'summary': summary, 'sentiment': sentiment
+                    'summary': full_content, 'sentiment': sentiment
                 }
         return None
 
