@@ -208,7 +208,7 @@ else:
                 with col_b:
                     st.markdown(f"**Full Article Content**")
                     # Clean up common RSS/HTML tags and display the long text
-                    clean_text = row.get('summary', 'No content available.').replace('<b>', '').replace('</b>', '').replace('<br>', '\n')
+                    clean_text = str(row.get('summary') or 'No content available.').replace('<b>', '').replace('</b>', '').replace('<br>', '\n')
                     # Use a text area or a scrollable container if the text is very long
                     if len(clean_text) > 1000:
                         st.text_area("Original Text", value=clean_text, height=300, disabled=True, label_visibility="collapsed")
