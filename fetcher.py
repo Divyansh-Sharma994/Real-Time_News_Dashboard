@@ -14,9 +14,13 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Suppress trafilatura chatter
+# Suppress chatter
 logging.getLogger('trafilatura').setLevel(logging.ERROR)
-logging.getLogger('hls').setLevel(logging.ERROR) # newspaper uses hls
+logging.getLogger('hls').setLevel(logging.ERROR) 
+# Suppress urllib3 connection pool warnings (caused by newspaper3k/trafilatura internal requests)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Adding +when:1d to filter it at Google's end, and strictly enforcing it in python.
 # Base URL for Global and India regions
