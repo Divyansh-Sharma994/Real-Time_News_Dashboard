@@ -5,6 +5,7 @@ from scheduler import init_scheduler
 from fetcher import fetch_all_companies
 from notifier import send_notification
 import datetime
+from bs4 import BeautifulSoup
 import streamlit.components.v1 as components
 
 # Initialize database
@@ -207,8 +208,15 @@ else:
                 
                 with col_b:
                     st.markdown(f"**Full Article Content**")
-                    # Clean up common RSS/HTML tags and display the long text
-                    clean_text = str(row.get('summary') or 'No content available.').replace('<b>', '').replace('</b>', '').replace('<br>', '\n')
+                    # Content can be raw HTML from RSS or clean text from Newspaper3k
+                    raw_content = str(row.get('summary') or 'No content available.')
+                    
+                    # If it looks like HTML, strip it for a cleaner look
+                    if '<' in raw_content and '>' in raw_content:
+                        clean_text = BeautifulSoup(raw_content, "html.parser").get_text()
+                    else:
+                        clean_text = raw_content
+
                     # Use a text area or a scrollable container if the text is very long
                     if len(clean_text) > 1000:
                         st.text_area("Original Text", value=clean_text, height=300, disabled=True, label_visibility="collapsed")
