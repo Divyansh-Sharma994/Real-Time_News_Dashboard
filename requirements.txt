@@ -7,3 +7,4 @@ python-dotenv>=1.0.0
 textblob>=0.17.1
 beautifulsoup4>=4.12.2
 newspaper3k>=0.2.8
+trafilatura>=1.6.0

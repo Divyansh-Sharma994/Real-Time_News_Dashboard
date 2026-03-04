@@ -7,6 +7,7 @@ from database import get_all_companies, add_article, update_company_status, init
 from textblob import TextBlob
 from newspaper import Article, Config
 from bs4 import BeautifulSoup
+import trafilatura
 import logging
 
 # Setup basic logging
@@ -53,33 +54,42 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
         summary = getattr(entry, 'summary', 'No summary available.')
         full_content = "Could not fetch full article content."
         
-        # Try to fetch full article content using Newspaper3k
+        # Try to fetch full article content using Newspaper3k and Trafilatura
         if link:
             try:
                 # 1. Resolve redirect if it's a Google News link
                 final_url = link
                 if "news.google.com" in link:
                     try:
+                        # Try to resolve redirect using requests
                         r = requests.get(link, headers=headers, timeout=5, allow_redirects=True)
                         final_url = r.url
                     except:
                         pass
                 
-                # 2. Use Newspaper3k with realistic headers
-                config = Config()
-                config.browser_user_agent = headers['User-Agent']
-                config.request_timeout = 10
+                # 2. Try Trafilatura (usually more robust for modern news sites)
+                downloaded = trafilatura.fetch_url(final_url)
+                if downloaded:
+                    extracted = trafilatura.extract(downloaded)
+                    if extracted and len(extracted.strip()) > 300: # Threshold for a real article
+                        full_content = extracted
                 
-                article = Article(final_url, config=config)
-                article.download()
-                article.parse()
-                
-                if article.text.strip():
-                    full_content = article.text
-                else:
-                    # Fallback to resolving HTML summary
+                # 3. Fallback to Newspaper3k if trafilatura fails or yields very little
+                if full_content == "Could not fetch full article content." or len(full_content) < 300:
+                    config = Config()
+                    config.browser_user_agent = headers['User-Agent']
+                    config.request_timeout = 10
+                    article = Article(final_url, config=config)
+                    article.download()
+                    article.parse()
+                    if article.text.strip() and len(article.text.strip()) > len(full_content):
+                        full_content = article.text
+
+                # 4. Final Fallback to RSS summary if both extraction methods are poor
+                if full_content == "Could not fetch full article content." or len(full_content) < 150:
                     summary_text = BeautifulSoup(summary, "html.parser").get_text()
                     full_content = summary_text if summary_text.strip() else summary
+                    
             except Exception as e:
                 logger.error(f"Error fetching full content from {link}: {e}")
                 summary_text = BeautifulSoup(summary, "html.parser").get_text()
