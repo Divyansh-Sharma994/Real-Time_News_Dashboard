@@ -4,3 +4,4 @@ requests>=2.31.0
 APScheduler>=3.10.1
 pandas>=2.0.0
 python-dotenv>=1.0.0
+textblob>=0.17.1
