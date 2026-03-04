@@ -189,8 +189,9 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
     # Close session after all regions for this company are done
     session.close()
 
-    # Final Status Update
-    now_str = datetime.now().strftime("%H:%M:%S")
+    # Final Status Update (convert to IST for the message)
+    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    now_str = ist_now.strftime("%H:%M:%S")
     status_msg = f"[{now_str}] Checked {region}: "
     if all_new_articles:
         status_msg += f"Found {len(all_new_articles)} new items"

@@ -58,12 +58,21 @@ with st.sidebar:
     
     if last_fetch_str:
         try:
-            last_fetch_dt = datetime.datetime.fromisoformat(last_fetch_str)
-            next_fetch_dt = last_fetch_dt + datetime.timedelta(minutes=5)
+            # Parse the stored UTC time
+            last_fetch_dt = datetime.datetime.fromisoformat(last_fetch_str).replace(tzinfo=datetime.timezone.utc)
             
-            # Text based times
-            st.write(f"**Last Check:** {last_fetch_dt.strftime('%H:%M:%S')}")
-            st.write(f"**Next Check:** {next_fetch_dt.strftime('%H:%M:%S')}")
+            # Convert to Indian Standard Time (UTC+5:30)
+            ist_offset = datetime.timedelta(hours=5, minutes=30)
+            last_fetch_ist = last_fetch_dt + ist_offset
+            next_fetch_ist = last_fetch_ist + datetime.timedelta(minutes=5)
+            
+            # Next fetch for JS (ISO format for the Date constructor)
+            # We need the absolute next fetch in UTC for the JS timer to work consistently
+            next_fetch_utc = last_fetch_dt + datetime.timedelta(minutes=5)
+            
+            # Text based times in IST
+            st.write(f"**Last Check (IST):** {last_fetch_ist.strftime('%H:%M:%S')}")
+            st.write(f"**Next Check (IST):** {next_fetch_ist.strftime('%H:%M:%S')}")
             
             # Classy JS Countdown Widget
             timer_html = f"""
@@ -72,7 +81,8 @@ with st.sidebar:
                 <div id="countdown" style="font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; color: #00E676; text-shadow: 0 0 10px rgba(0,230,118,0.3);">--:--</div>
             </div>
             <script>
-                var nextFetch = new Date('{next_fetch_dt.isoformat()}').getTime();
+                // We pass the UTC ISO string so JS correctly identifies it and converts to browser local time
+                var nextFetch = new Date('{next_fetch_utc.isoformat()}').getTime();
                 var countdownEl = document.getElementById("countdown");
                 
                 var x = setInterval(function() {{
