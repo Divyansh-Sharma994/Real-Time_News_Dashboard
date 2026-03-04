@@ -58,14 +58,11 @@ with st.sidebar:
     if last_fetch_str:
         try:
             last_fetch_dt = datetime.datetime.fromisoformat(last_fetch_str)
-            # Convert to IST for UI
-            last_fetch_ist = last_fetch_dt + datetime.timedelta(hours=5, minutes=30)
             next_fetch_dt = last_fetch_dt + datetime.timedelta(minutes=5)
-            next_fetch_ist = next_fetch_dt + datetime.timedelta(hours=5, minutes=30)
             
-            # Text based times in IST
-            st.write(f"**Last Check:** {last_fetch_ist.strftime('%H:%M:%S')} (IST)")
-            st.write(f"**Next Check:** {next_fetch_ist.strftime('%H:%M:%S')} (IST)")
+            # Text based times
+            st.write(f"**Last Check:** {last_fetch_dt.strftime('%H:%M:%S')}")
+            st.write(f"**Next Check:** {next_fetch_dt.strftime('%H:%M:%S')}")
             
             # Classy JS Countdown Widget
             timer_html = f"""
@@ -123,7 +120,7 @@ with st.sidebar:
     if st.button("Fetch Now! (Manual Override)"):
         with st.spinner("Fetching latest news..."):
             new_arts = fetch_all_companies()
-            set_last_fetch_time(datetime.datetime.now(datetime.timezone.utc).isoformat())
+            set_last_fetch_time(datetime.datetime.now().isoformat())
             if new_arts:
                 send_notification(new_arts)
                 st.success(f"Found {len(new_arts)} new articles and sent notification.")
@@ -195,22 +192,30 @@ else:
             axis=1, result_type='expand'
         )
 
-        # Map title to be a markdown link
-        df['title'] = df.apply(lambda row: f"<a href='{row['link']}' target='_blank' style='text-decoration: none; color: #4DA8DA; font-weight: 500;'>{row['title']}</a>", axis=1)
-        
-        # Drop raw link column and utility columns
-        df = df.drop(columns=['link', 'parsed_date', 'published_at'])
-        
-        # Rename columns for presentation
-        df = df.rename(columns={
-            'title': 'News Title',
-            'company_name': 'Brand Tracked',
-            'source': 'Source'
-        })
-        
-        # Reorder columns intuitively
-        df = df[['Brand Tracked', 'News Title', 'Source', 'Time (IST)', 'Relative Time']]
-        
-        # Render table with HTML enabled for links
-        st.write(df.to_html(escape=False, index=False, classes=["table", "table-hover"]), unsafe_allow_html=True)
+        # Render cards with expanders instead of a static table
+        for _, row in df.iterrows():
+            sentiment = row.get('sentiment', 'Neutral')
+            sent_color = "#00D166" if sentiment == "Positive" else "#FF4B4B" if sentiment == "Negative" else "#94A3B8"
+            
+            # Individual Article Card
+            with st.expander(f"🏢 **{row['company_name']}**: {row['title']}", expanded=False):
+                col_a, col_b, col_c = st.columns([0.2, 0.6, 0.2])
+                
+                with col_a:
+                    st.markdown(f"**Sentiment**")
+                    st.markdown(f"<span style='color: {sent_color}; font-weight: bold;'>{sentiment.upper()}</span>", unsafe_allow_html=True)
+                
+                with col_b:
+                    st.markdown(f"**Summary**")
+                    # Remove HTML tags from summary if any
+                    clean_summary = row.get('summary', 'No summary available.').replace('<b>', '').replace('</b>', '').replace('<br>', '\n')
+                    st.markdown(f"_{clean_summary}_")
+                
+                with col_c:
+                    st.markdown(f"**Details**")
+                    st.write(f"Source: {row['source']}")
+                    st.write(f"IST: {row['Time (IST)']}")
+                    st.write(f"Relative: {row['Relative Time']}")
+                
+                st.markdown(f"<a href='{row['link']}' target='_blank' style='text-decoration: none; color: #4DA8DA;'>View Full Article 🔗</a>", unsafe_allow_html=True)
 

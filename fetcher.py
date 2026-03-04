@@ -3,7 +3,8 @@ import requests
 import urllib.parse
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
-from database import get_all_companies, add_article, update_company_status
+from database import get_all_companies, add_article, update_company_status, init_db
+from textblob import TextBlob
 
 # Adding +when:1d to filter it at Google's end, and strictly enforcing it in python.
 # Base URL for Global and India regions
@@ -42,6 +43,18 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
         link = getattr(entry, 'link', '')
         published_at = getattr(entry, 'published', 'Unknown Date')
         source = getattr(entry, 'source', {}).get('title', 'Google News')
+        summary = getattr(entry, 'summary', 'No summary available.')
+        
+        # Simple Sentiment analysis using TextBlob
+        blob = TextBlob(f"{title} {summary}")
+        polarity = blob.sentiment.polarity
+        
+        if polarity > 0.05:
+            sentiment = "Positive"
+        elif polarity < -0.05:
+            sentiment = "Negative"
+        else:
+            sentiment = "Neutral"
         
         if link:
             is_new = add_article(
@@ -49,12 +62,15 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                 title=title,
                 link=link,
                 published_at=published_at,
-                source=source
+                source=source,
+                summary=summary,
+                sentiment=sentiment
             )
             if is_new:
                 return {
                     'title': title, 'link': link, 'published_at': published_at,
-                    'source': source, 'company_name': company_name
+                    'source': source, 'company_name': company_name,
+                    'summary': summary, 'sentiment': sentiment
                 }
         return None
 

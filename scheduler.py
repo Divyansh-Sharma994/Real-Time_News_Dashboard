@@ -16,7 +16,7 @@ def run_job():
     else:
         print("No new articles found.")
         
-    set_last_fetch_time(datetime.datetime.now(datetime.timezone.utc).isoformat())
+    set_last_fetch_time(datetime.datetime.now().isoformat())
 
 def init_scheduler():
     # Only run in main process (prevents duplicate jobs in certain WSGI environments)

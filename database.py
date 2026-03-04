@@ -47,10 +47,22 @@ def init_db():
                 link TEXT UNIQUE,
                 published_at TEXT,
                 source TEXT,
+                summary TEXT,
+                sentiment TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (company_id) REFERENCES companies(id)
             )
         ''')
+        
+        # Primitive Migration: Add summary and sentiment columns to articles
+        try:
+            cursor.execute("ALTER TABLE articles ADD COLUMN summary TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE articles ADD COLUMN sentiment TEXT")
+        except sqlite3.OperationalError:
+            pass
         
         # Create a tiny status table to hold single app vars like last_fetch_time 
         cursor.execute('''
@@ -106,14 +118,14 @@ def get_all_companies():
         cursor.execute('SELECT id, name, region, last_status FROM companies ORDER BY name')
         return [dict(row) for row in cursor.fetchall()]
 
-def add_article(company_id: int, title: str, link: str, published_at: str, source: str):
+def add_article(company_id: int, title: str, link: str, published_at: str, source: str, summary: str = None, sentiment: str = None):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
             cursor.execute('''
-                INSERT INTO articles (company_id, title, link, published_at, source)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (company_id, title, link, published_at, source))
+                INSERT INTO articles (company_id, title, link, published_at, source, summary, sentiment)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (company_id, title, link, published_at, source, summary, sentiment))
             conn.commit()
             return True # Successfully added
         except sqlite3.IntegrityError:
@@ -123,7 +135,7 @@ def get_recent_articles(limit=50):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT a.title, a.link, a.published_at, a.source, c.name as company_name 
+            SELECT a.title, a.link, a.published_at, a.source, a.summary, a.sentiment, c.name as company_name 
             FROM articles a
             JOIN companies c ON a.company_id = c.id
             ORDER BY a.created_at DESC
