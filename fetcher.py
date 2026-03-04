@@ -14,6 +14,10 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Suppress trafilatura chatter
+logging.getLogger('trafilatura').setLevel(logging.ERROR)
+logging.getLogger('hls').setLevel(logging.ERROR) # newspaper uses hls
+
 # Adding +when:1d to filter it at Google's end, and strictly enforcing it in python.
 # Base URL for Global and India regions
 # India-specific: append &gl=IN&ceid=IN:en
@@ -61,11 +65,12 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                 final_url = link
                 if "news.google.com" in link:
                     try:
-                        # Try to resolve redirect using requests
-                        r = requests.get(link, headers=headers, timeout=5, allow_redirects=True)
-                        final_url = r.url
-                    except:
-                        pass
+                        # Use a persistent session for better cookie handling
+                        with requests.Session() as s:
+                            r = s.get(link, headers=headers, timeout=7, allow_redirects=True)
+                            final_url = r.url
+                    except Exception as e:
+                        logger.debug(f"Redirect resolution failed: {e}")
                 
                 # 2. Try Trafilatura (usually more robust for modern news sites)
                 downloaded = trafilatura.fetch_url(final_url)
