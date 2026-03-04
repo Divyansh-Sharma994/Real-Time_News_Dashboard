@@ -121,7 +121,6 @@ with st.sidebar:
     if st.button("Fetch Now! (Manual Override)"):
         with st.spinner("Fetching latest news..."):
             new_arts = fetch_all_companies()
-            set_last_fetch_time(datetime.datetime.now().isoformat())
             if new_arts:
                 send_notification(new_arts)
                 st.success(f"Found {len(new_arts)} new articles and sent notification.")

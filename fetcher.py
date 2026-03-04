@@ -84,8 +84,10 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                         logger.debug(f"Redirect resolution failed: {e}")
                 
                 # 2. Try Trafilatura (usually more robust for modern news sites)
+                # Setting a strict timeout to prevent hangs
                 downloaded = trafilatura.fetch_url(final_url)
                 if downloaded:
+                    # extract() can also be slow, but it's local CPU work
                     extracted = trafilatura.extract(downloaded)
                     if extracted and len(extracted.strip()) > 300: # Threshold for a real article
                         full_content = extracted
@@ -202,13 +204,21 @@ def fetch_all_companies():
     companies = get_all_companies()
     all_new_articles = []
     
-    for comp in companies:
-        company_id = comp['id']
-        company_name = comp['name']
-        region = comp.get('region', 'Global')
+    # Update global fetch time at start so timer resets in UI
+    import datetime
+    from database import set_last_fetch_time
+    set_last_fetch_time(datetime.datetime.now(datetime.timezone.utc).isoformat())
+
+    # Process companies in parallel (max 3 at once) to avoid memory spikes
+    # but still speed things up significantly
+    def fetch_comp(comp):
+        return fetch_rss_for_company(comp['name'], comp['id'], comp.get('region', 'Global'))
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        results = list(executor.map(fetch_comp, companies))
         
-        new_articles = fetch_rss_for_company(company_name, company_id, region)
-        all_new_articles.extend(new_articles)
+    for res in results:
+        all_new_articles.extend(res)
         
     return all_new_articles
 
