@@ -194,7 +194,7 @@ else:
 
         # Render cards with expanders instead of a static table
         for _, row in df.iterrows():
-            sentiment = row.get('sentiment', 'Neutral')
+            sentiment = str(row.get('sentiment', 'Neutral') or 'Neutral')
             sent_color = "#00D166" if sentiment == "Positive" else "#FF4B4B" if sentiment == "Negative" else "#94A3B8"
             
             # Individual Article Card
