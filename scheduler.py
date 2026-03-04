@@ -25,11 +25,13 @@ def init_scheduler():
         
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_job, 'interval', minutes=5, id='fetch_job', replace_existing=True)
+    # Start the scheduler
     scheduler.start()
     os.environ["SCHEDULER_STARTED"] = "1"
     
-    # Run once immediately on start
-    run_job()
+    # Run once immediately in a SEPARATE thread so we don't block Streamlit UI
+    import threading
+    threading.Thread(target=run_job, daemon=True).start()
     
     atexit.register(lambda: scheduler.shutdown())
     print("Background scheduler initialized. Running every 5 minutes.")
