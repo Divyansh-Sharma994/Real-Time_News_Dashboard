@@ -9,6 +9,7 @@ from newspaper import Article, Config
 from bs4 import BeautifulSoup
 import trafilatura
 import logging
+from concurrent.futures import ThreadPoolExecutor # For parallel extraction
 
 # Setup basic logging
 logging.basicConfig(level=logging.INFO)
@@ -151,16 +152,20 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
             
             # Step 1: 24 Hour Window
             region_found = 0
-            for entry in feed.entries:
-                if is_within_24_hours(getattr(entry, 'published', 'Unknown Date')):
-                    art = process_entry(entry)
-                    if art:
-                        all_new_articles.append(art)
-                        region_found += 1
+            entries_to_process = [e for e in feed.entries if is_within_24_hours(getattr(e, 'published', 'Unknown Date'))]
+            
+            # Process entries in parallel (max 5 threads per company)
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                results = list(executor.map(process_entry, entries_to_process))
+                
+            for art in results:
+                if art:
+                    all_new_articles.append(art)
+                    region_found += 1
             
             total_found_in_24h += region_found
 
-            # Step 2: Fallback if NOTHING found in 24h for THIS region
+            # Step 2: Fallback if NOTHING found in 24h for THIS region (sequential fallback is fine as it's rare)
             if region_found == 0:
                 if feed.entries:
                     # Try most recent in existing feed
