@@ -49,6 +49,13 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36'
     }
 
+    # Create a single session for all requests in this company fetch
+    # This reuses connections and avoids 'Connection pool is full' warnings
+    session = requests.Session()
+    adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
     # helper for parsing feed entries
     def process_entry(entry):
         title = getattr(entry, 'title', 'No Title')
@@ -65,10 +72,9 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                 final_url = link
                 if "news.google.com" in link:
                     try:
-                        # Use a persistent session for better cookie handling
-                        with requests.Session() as s:
-                            r = s.get(link, headers=headers, timeout=7, allow_redirects=True)
-                            final_url = r.url
+                        # Use the shared session for better performance
+                        r = session.get(link, headers=headers, timeout=7, allow_redirects=True)
+                        final_url = r.url
                     except Exception as e:
                         logger.debug(f"Redirect resolution failed: {e}")
                 
@@ -168,6 +174,9 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                     except: pass
         except Exception as e:
             print(f"Error fetching {r} RSS for {company_name}: {e}")
+
+    # Close session after all regions for this company are done
+    session.close()
 
     # Final Status Update
     now_str = datetime.now().strftime("%H:%M:%S")
