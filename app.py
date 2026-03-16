@@ -3,9 +3,15 @@ import pandas as pd
 import warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 from database import init_db, add_company, remove_company, get_all_companies, get_recent_articles, get_last_fetch_time, set_last_fetch_time, get_articles_for_brand
-from scheduler import init_scheduler
-from fetcher import fetch_all_companies
-from notifier import send_notification
+try:
+    from scheduler import init_scheduler
+    from fetcher import fetch_all_companies
+    from notifier import send_notification
+except Exception as e:
+    import traceback
+    st.error(f"Import Error: {e}")
+    st.code(traceback.format_exc())
+    st.stop()
 import datetime
 from bs4 import BeautifulSoup
 import streamlit.components.v1 as components
