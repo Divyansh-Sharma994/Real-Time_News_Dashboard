@@ -149,13 +149,10 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                 
                 if full_content != "Could not fetch full article content.":
                     logger.info(f"Successfully extracted content for {final_url}")
-            except Exception as e:
-                logger.error(f"Error fetching article content from {link}: {e}")
-                    logger.info(f"Successfully extracted content for {final_url}")
                 else:
                     logger.warning(f"All extraction methods failed for {final_url}")
             except Exception as e:
-                logger.error(f"Error fetching full content from {link}: {e}")
+                logger.error(f"Error fetching article content from {link}: {e}")
                 summary_text = BeautifulSoup(summary, "html.parser").get_text()
                 full_content = summary_text if summary_text.strip() else summary
         
