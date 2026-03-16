@@ -49,10 +49,16 @@ def init_db():
                 source TEXT,
                 summary TEXT,
                 sentiment TEXT,
+                extraction_method TEXT DEFAULT 'summary',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (company_id) REFERENCES companies(id)
             )
         ''')
+        # Primitive Migration: Add extraction_method column to articles
+        try:
+            cursor.execute("ALTER TABLE articles ADD COLUMN extraction_method TEXT DEFAULT 'summary'")
+        except sqlite3.OperationalError:
+            pass
         
         # Primitive Migration: Add summary and sentiment columns to articles
         try:
@@ -118,14 +124,14 @@ def get_all_companies():
         cursor.execute('SELECT id, name, region, last_status FROM companies ORDER BY name')
         return [dict(row) for row in cursor.fetchall()]
 
-def add_article(company_id: int, title: str, link: str, published_at: str, source: str, summary: str = None, sentiment: str = None):
+def add_article(company_id: int, title: str, link: str, published_at: str, source: str, summary: str = None, sentiment: str = None, extraction_method: str = 'summary'):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
             cursor.execute('''
-                INSERT INTO articles (company_id, title, link, published_at, source, summary, sentiment)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (company_id, title, link, published_at, source, summary, sentiment))
+                INSERT INTO articles (company_id, title, link, published_at, source, summary, sentiment, extraction_method)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (company_id, title, link, published_at, source, summary, sentiment, extraction_method))
             conn.commit()
             return True # Successfully added
         except sqlite3.IntegrityError:
@@ -135,12 +141,24 @@ def get_recent_articles(limit=50):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT a.title, a.link, a.published_at, a.source, a.summary, a.sentiment, c.name as company_name 
+            SELECT a.title, a.link, a.published_at, a.source, a.summary, a.sentiment, a.extraction_method, c.name as company_name 
             FROM articles a
             JOIN companies c ON a.company_id = c.id
             ORDER BY a.created_at DESC
             LIMIT ?
         ''', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_articles_for_brand(company_name):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT a.title, a.link, a.published_at, a.source, a.summary, a.sentiment, a.extraction_method, c.name as company_name 
+            FROM articles a
+            JOIN companies c ON a.company_id = c.id
+            WHERE c.name = ?
+            ORDER BY a.published_at DESC
+        ''', (company_name,))
         return [dict(row) for row in cursor.fetchall()]
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 import feedparser
 import requests
 import urllib.parse
+import warnings
+warnings.filterwarnings("ignore", category=SyntaxWarning)
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 from database import get_all_companies, add_article, update_company_status, init_db
@@ -10,6 +12,9 @@ from bs4 import BeautifulSoup
 import trafilatura
 import logging
 from concurrent.futures import ThreadPoolExecutor # For parallel extraction
+from googlenewsdecoder import gnewsdecoder
+import time
+
 
 # Setup basic logging
 logging.basicConfig(level=logging.INFO)
@@ -39,7 +44,7 @@ def is_within_24_hours(published_at: str) -> bool:
     except Exception:
         return False
 
-def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Global'):
+def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Global', sync_time=None):
     # Determine which regions to fetch
     regions_to_fetch = []
     if region == 'Both':
@@ -63,6 +68,7 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
 
     # helper for parsing feed entries
     def process_entry(entry):
+        import time # Local import for tiny sleep
         title = getattr(entry, 'title', 'No Title')
         link = getattr(entry, 'link', '')
         published_at = getattr(entry, 'published', 'Unknown Date')
@@ -77,11 +83,30 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                 final_url = link
                 if "news.google.com" in link:
                     try:
-                        # Use the shared session for better performance
-                        r = session.get(link, headers=headers, timeout=7, allow_redirects=True)
-                        final_url = r.url
+                        # Use googlenewsdecoder (handles the internal Google redirect)
+                        decoded = gnewsdecoder(link)
+                        if decoded.get("status"):
+                            final_url = decoded["decoded_url"]
+                            logger.debug(f"Decoded Google News URL → {final_url}")
+                        else:
+                            logger.warning(f"gnewsdecoder failed: {decoded.get('message')}")
                     except Exception as e:
-                        logger.debug(f"Redirect resolution failed: {e}")
+                        logger.error(f"Error using gnewsdecoder: {e}")
+                # Optional retry if decoder didn't change URL
+                def fetch_with_retry(url, hdrs, tries=3, backoff=2):
+                    for i in range(1, tries + 1):
+                        try:
+                            r = session.get(url, headers=hdrs, timeout=7, allow_redirects=True)
+                            if r.status_code == 200:
+                                return r
+                        except Exception as exc:
+                            logger.debug(f"Retry {i}/{tries} failed: {exc}")
+                        time.sleep(backoff * i)
+                    return None
+                if final_url == link:
+                    r = fetch_with_retry(link, headers)
+                    if r:
+                        final_url = r.url
                 
                 # 2. Try Trafilatura (usually more robust for modern news sites)
                 # Setting a strict timeout to prevent hangs
@@ -94,20 +119,38 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                 
                 # 3. Fallback to Newspaper3k if trafilatura fails or yields very little
                 if full_content == "Could not fetch full article content." or len(full_content) < 300:
-                    config = Config()
-                    config.browser_user_agent = headers['User-Agent']
-                    config.request_timeout = 10
-                    article = Article(final_url, config=config)
-                    article.download()
-                    article.parse()
-                    if article.text.strip() and len(article.text.strip()) > len(full_content):
-                        full_content = article.text
-
-                # 4. Final Fallback to RSS summary if both extraction methods are poor
+                    # Skip newspaper3k if final_url is STILL a Google News link (it will likely 503/403)
+                    if "news.google.com" not in final_url:
+                        # Retry logic for Newspaper3k to handle transient 503 errors
+                        max_attempts = 3
+                        for attempt in range(1, max_attempts + 1):
+                            try:
+                                # Small random delay before each attempt to reduce bot detection
+                                time.sleep(0.5 * attempt)
+                                config = Config()
+                                config.browser_user_agent = headers['User-Agent']
+                                config.request_timeout = 10
+                                article = Article(final_url, config=config)
+                                article.download()
+                                article.parse()
+                                if article.text.strip() and len(article.text.strip()) > len(full_content):
+                                    full_content = article.text
+                                # Success, break out of retry loop
+                                break
+                            except Exception as e:
+                                logger.debug(f"Newspaper3k attempt {attempt}/{max_attempts} failed for {final_url}: {e}")
+                                if attempt == max_attempts:
+                                    logger.error(f"Newspaper3k ultimately failed for {final_url} after {max_attempts} attempts")
+                
+                # 4. Final fallback – use the RSS summary (cleaned) if everything else fails
                 if full_content == "Could not fetch full article content." or len(full_content) < 150:
                     summary_text = BeautifulSoup(summary, "html.parser").get_text()
                     full_content = summary_text if summary_text.strip() else summary
-                    
+                # Log outcome for debugging
+                if full_content != "Could not fetch full article content.":
+                    logger.info(f"Successfully extracted content for {final_url}")
+                else:
+                    logger.warning(f"All extraction methods failed for {final_url}")
             except Exception as e:
                 logger.error(f"Error fetching full content from {link}: {e}")
                 summary_text = BeautifulSoup(summary, "html.parser").get_text()
@@ -123,6 +166,10 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
             sentiment = "Negative"
         else:
             sentiment = "Neutral"
+        # Determine extraction method for storage
+        extraction_method = 'summary'
+        if full_content != "Could not fetch full article content." and len(full_content) >= 150:
+            extraction_method = 'full'
         
         if link:
             is_new = add_article(
@@ -132,13 +179,15 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                 published_at=published_at,
                 source=source,
                 summary=full_content, # Now storing full content in summary column
-                sentiment=sentiment
+                sentiment=sentiment,
+                extraction_method=extraction_method # Pass the extraction method
             )
             if is_new:
                 return {
                     'title': title, 'link': link, 'published_at': published_at,
                     'source': source, 'company_name': company_name,
-                    'summary': full_content, 'sentiment': sentiment
+                    'summary': full_content, 'sentiment': sentiment,
+                    'extraction_method': extraction_method
                 }
         return None
 
@@ -156,8 +205,8 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
             region_found = 0
             entries_to_process = [e for e in feed.entries if is_within_24_hours(getattr(e, 'published', 'Unknown Date'))]
             
-            # Process entries in parallel (max 5 threads per company)
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            # Process entries in parallel (max 2 threads per company to avoid 503s from Google)
+            with ThreadPoolExecutor(max_workers=2) as executor:
                 results = list(executor.map(process_entry, entries_to_process))
                 
             for art in results:
@@ -189,8 +238,9 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
     # Close session after all regions for this company are done
     session.close()
 
-    # Final Status Update (convert to IST for the message)
-    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    # Final Status Update (use sync_time for consistency if provided)
+    ref_time = sync_time if sync_time else datetime.now(timezone.utc)
+    ist_now = ref_time + timedelta(hours=5, minutes=30)
     now_str = ist_now.strftime("%H:%M:%S")
     status_msg = f"[{now_str}] Checked {region}: "
     if all_new_articles:
@@ -205,17 +255,16 @@ def fetch_all_companies():
     companies = get_all_companies()
     all_new_articles = []
     
-    # Update global fetch time at start so timer resets in UI
-    import datetime
+    # Capture single session start time for consistency across all brand status updates
+    session_start_utc = datetime.now(timezone.utc)
     from database import set_last_fetch_time
-    set_last_fetch_time(datetime.datetime.now(datetime.timezone.utc).isoformat())
+    set_last_fetch_time(session_start_utc.isoformat())
 
-    # Process companies in parallel (max 3 at once) to avoid memory spikes
-    # but still speed things up significantly
+    # Process companies in parallel (max 2 at once) to avoid memory spikes and 503s
     def fetch_comp(comp):
-        return fetch_rss_for_company(comp['name'], comp['id'], comp.get('region', 'Global'))
+        return fetch_rss_for_company(comp['name'], comp['id'], comp.get('region', 'Global'), sync_time=session_start_utc)
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         results = list(executor.map(fetch_comp, companies))
         
     for res in results:

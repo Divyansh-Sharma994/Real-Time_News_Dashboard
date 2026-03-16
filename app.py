@@ -1,12 +1,15 @@
 import streamlit as st
 import pandas as pd
-from database import init_db, add_company, remove_company, get_all_companies, get_recent_articles, get_last_fetch_time, set_last_fetch_time
+import warnings
+warnings.filterwarnings("ignore", category=SyntaxWarning)
+from database import init_db, add_company, remove_company, get_all_companies, get_recent_articles, get_last_fetch_time, set_last_fetch_time, get_articles_for_brand
 from scheduler import init_scheduler
 from fetcher import fetch_all_companies
 from notifier import send_notification
 import datetime
 from bs4 import BeautifulSoup
 import streamlit.components.v1 as components
+import io
 
 # Initialize database
 init_db()
@@ -137,6 +140,39 @@ with st.sidebar:
             else:
                 st.info("No new articles found.")
             st.rerun()
+
+    # Brand Report Download Section
+    st.markdown("---")
+    st.subheader("📊 Download Brand Report")
+    
+    brand_names = [comp['name'] for comp in companies]
+    report_brand = st.selectbox("Select Brand for Report", [""] + brand_names, index=0, help="Select a brand to download its articles in Excel format")
+    
+    if report_brand:
+        brand_articles = get_articles_for_brand(report_brand)
+        if brand_articles:
+            # Prepare data for Excel
+            report_df = pd.DataFrame(brand_articles)
+            
+            # Format report as requested: url, title, agency, time of publishing
+            export_df = report_df[['link', 'title', 'source', 'published_at']].copy()
+            export_df.columns = ['URL', 'Title', 'Agency', 'Time of Publishing']
+            
+            # Create Excel file in memory
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                export_df.to_excel(writer, index=False, sheet_name='News Articles')
+            processed_data = output.getvalue()
+            
+            st.download_button(
+                label=f"📥 Download {report_brand} Report",
+                data=processed_data,
+                file_name=f"{report_brand}_news_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        else:
+            st.warning(f"No articles found for {report_brand}.")
 
 # Main area for displaying articles
 st.header("Recent Articles")
