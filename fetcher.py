@@ -133,6 +133,23 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
                                 article = Article(final_url, config=config)
                                 article.download()
                                 article.parse()
+                                
+                                # Secondary Date Verification: Check metadata publish date
+                                if article.publish_date:
+                                    ext_date = article.publish_date
+                                    # Ensure offset-aware for comparison
+                                    if ext_date.tzinfo is None:
+                                        ext_date = ext_date.replace(tzinfo=timezone.utc)
+                                    
+                                    now = datetime.now(timezone.utc)
+                                    if (now - ext_date) > timedelta(hours=24):
+                                        logger.warning(f"Discarding old article based on metadata ({ext_date}): {final_url}")
+                                        return None 
+                                    
+                                    # If verified and within 24h, we can update the published_at string if it's more accurate
+                                    # but we'll stick to string format expected by database
+                                    # published_at = ext_date.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
                                 if article.text.strip() and len(article.text.strip()) > len(full_content):
                                     full_content = article.text
                                 # Success, break out of retry loop
