@@ -216,22 +216,6 @@ def fetch_rss_for_company(company_name: str, company_id: int, region: str = 'Glo
             
             total_found_in_24h += region_found
 
-            # Step 2: Fallback if NOTHING found in 24h for THIS region (sequential fallback is fine as it's rare)
-            if region_found == 0:
-                if feed.entries:
-                    # Try most recent in existing feed
-                    art = process_entry(feed.entries[0])
-                    if art: all_new_articles.append(art)
-                else:
-                    # Broad fallback
-                    try:
-                        fb_url = BASE_SEARCH_URL.format(query=encoded_query, suffix=suffix)
-                        fb_resp = requests.get(fb_url, headers=headers, timeout=10)
-                        fb_feed = feedparser.parse(fb_resp.content)
-                        if fb_feed.entries:
-                            art = process_entry(fb_feed.entries[0])
-                            if art: all_new_articles.append(art)
-                    except: pass
         except Exception as e:
             print(f"Error fetching {r} RSS for {company_name}: {e}")
 
